@@ -1,0 +1,73 @@
+name: Build APK and EXE
+on:
+  push:
+    branches: [ "builds/*" ]
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Make gradlew executable
+        run: chmod +x android/gradlew
+      - name: Build APK
+        run: |
+          cd android
+          ./gradlew assembleRelease
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: android/app/build/outputs/apk/release/*.apk
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "6.0.x"
+      - name: Build WinForms app
+        run: |
+          cd windows
+          dotnet restore
+          dotnet publish -c Release -o publish
+      - name: Install Inno Setup
+        run: choco install innosetup -y
+      - name: Compile Setup
+        run: |
+          cd windows
+          ISCC.exe setup.iss
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: setup-exe
+          path: windows/*.exe
+  release:
+    needs: [build-android, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download APK
+        uses: actions/download-artifact@v4
+        with:
+          name: app-release
+          path: apk
+      - name: Download EXE
+        uses: actions/download-artifact@v4
+        with:
+          name: setup-exe
+          path: exe
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Build ${{ github.ref_name }}
+          files: |
+            apk/*.apk
+            exe/*.exe
